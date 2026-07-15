@@ -132,6 +132,45 @@ class AnalizadorIntegrabilidad:
         self.puntos_barrido = puntos_barrido
 
     # ------------------------------------------------------------------
+    def _intervalos_fuera_de_dominio(self, a: float, b: float):
+        """
+        Devuelve los tramos (lo, hi) dentro de [a, b] donde la función,
+        de acuerdo con su dominio real simbólico, NO toma valores
+        reales en TODO un subintervalo (por ejemplo, sqrt(4 - x**2)
+        fuera de [-2, 2], o log(x) para x <= 0).
+
+        A diferencia de una singularidad puntual (como 1/x en x=0, que
+        el dominio excluye como un único punto de medida cero), aquí
+        se excluye un subintervalo completo de medida positiva. Este
+        caso necesita tratarse aparte: intentar límites laterales
+        "hacia dentro" de un tramo así siempre involucra valores
+        complejos y nunca converge a algo clasificable como removible,
+        salto finito o asíntota.
+        """
+        try:
+            dominio = self.funcion.dominio_real()
+            complemento = sp.Complement(sp.Interval(a, b), dominio)
+        except (TypeError, NotImplementedError):
+            return []
+        piezas = complemento.args if isinstance(
+            complemento, sp.Union) else [complemento]
+        tramos = []
+        for pieza in piezas:
+            if not isinstance(pieza, sp.Interval):
+                continue  # ignora puntos aislados (FiniteSet): esos ya
+                # los cubre el análisis de singularidades puntual
+            try:
+                if pieza.measure <= 0:
+                    continue
+                lo = float(max(pieza.start, a))
+                hi = float(min(pieza.end, b))
+            except (TypeError, ValueError):
+                continue
+            if hi - lo > 1e-9:
+                tramos.append((lo, hi))
+        return tramos
+
+    # ------------------------------------------------------------------
     def _candidatos_singularidad_simbolicos(self, a: float, b: float):
         """Obtiene candidatos a puntos de discontinuidad resolviendo,
         simbólicamente, dónde el denominador se anula o el dominio
@@ -154,19 +193,48 @@ class AnalizadorIntegrabilidad:
             complemento = sp.Complement(sp.Interval(a, b), dominio)
             if complemento is not sp.EmptySet:
                 puntos = _extraer_puntos_frontera(complemento)
-                candidatos.update(p for p in puntos if a - 1e-9 <= p <= b + 1e-9)
+                candidatos.update(p for p in puntos if a -
+                                  1e-9 <= p <= b + 1e-9)
         except (TypeError, NotImplementedError):
             pass
 
         return sorted(candidatos)
 
-    def _candidatos_numericos(self, a: float, b: float):
+    def _candidatos_numericos(self, a: float, b: float, intervalos_excluidos=()):
         """Barrido numérico para detectar NaN/Inf que el análisis
-        simbólico no haya podido resolver (red de seguridad)."""
+        simbólico no haya podido resolver (red de seguridad).
+
+        Los puntos "malos" que caen en el INTERIOR de un tramo ya
+        identificado por `_intervalos_fuera_de_dominio` no aportan
+        información nueva: son ruido de un tramo ancho de valores
+        complejos que, sin este filtro, colapsaría en un único punto
+        "promedio" imposible de clasificar (ni removible, ni salto,
+        ni asíntota). Las fronteras de ese tramo sí se conservan como
+        candidatos, para que se clasifiquen como
+        `NO_DEFINIDA_EN_DOMINIO`.
+        """
         f = self.funcion.funcion_numerica()
         xs = np.linspace(a, b, self.puntos_barrido)
         ys = f(xs)
         malos = xs[~np.isfinite(ys)]
+
+        if intervalos_excluidos:
+            # Margen generoso (varios pasos de malla): el análisis
+            # simbólico ya aporta la frontera EXACTA de cada tramo
+            # excluido (ver `_intervalos_fuera_de_dominio` y el
+            # candidato simbólico correspondiente), así que no hace
+            # falta que el barrido numérico también "encuentre" esa
+            # zona; solo generaría ruido cercano al borde que no
+            # calza con la tolerancia exacta usada en
+            # `_clasificar_punto` y termina como INDETERMINABLE.
+            margen = 8 * (b - a) / self.puntos_barrido
+
+            def _cerca_o_dentro_de_tramo_excluido(v):
+                return any(lo - margen <= v <= hi + margen
+                           for lo, hi in intervalos_excluidos)
+            malos = np.array(
+                [v for v in malos if not _cerca_o_dentro_de_tramo_excluido(v)])
+
         candidatos = []
         # Agrupar puntos consecutivos "malos" en un único candidato
         # (representan la misma discontinuidad muestreada varias veces).
@@ -182,7 +250,8 @@ class AnalizadorIntegrabilidad:
             candidatos.append(float(np.mean(grupo)))
         return candidatos
 
-    def _clasificar_punto(self, punto: float, a: float, b: float) -> Discontinuidad:
+    def _clasificar_punto(self, punto: float, a: float, b: float,
+                          intervalos_excluidos=()) -> Discontinuidad:
         """Clasifica un punto candidato como removible, salto finito,
         infinita o fuera de dominio, usando límites simbólicos cuando
         es posible."""
@@ -233,8 +302,8 @@ class AnalizadorIntegrabilidad:
             return Discontinuidad(
                 punto, TipoDiscontinuidad.REMOVIBLE, limite_izq, limite_der,
                 detalle=f"ambos límites laterales existen y valen "
-                        f"{valores_finitos[0]} pero f no coincide (o no "
-                        f"está definida) en x0"
+                f"{valores_finitos[0]} pero f no coincide (o no "
+                f"está definida) en x0"
             )
 
         if len(valores_finitos) == 2:
@@ -249,6 +318,29 @@ class AnalizadorIntegrabilidad:
                 detalle="solo un límite lateral existe (punto extremo del "
                         "intervalo o dominio restringido)"
             )
+
+        # Última red de seguridad: si SymPy no pudo resolver los
+        # límites laterales de forma concluyente Y el punto coincide
+        # con la frontera de un tramo COMPLETO donde la función no
+        # toma valores reales (dominio restringido, p. ej.
+        # sqrt(4 - x**2) fuera de [-2, 2] o log(x) para x <= 0), la
+        # causa real no es que la clasificación sea "indeterminable":
+        # es que, del lado excluido, cualquier límite involucra
+        # valores complejos y nunca converge a algo real. Se
+        # reclasifica como NO_DEFINIDA_EN_DOMINIO, más preciso y sin
+        # falsa alarma. Esto NO afecta puntos donde ya se encontró un
+        # comportamiento concreto (asíntota, removible, salto)
+        # evaluando desde el lado válido, más arriba en este método.
+        for lo, hi in intervalos_excluidos:
+            if abs(punto - hi) < 1e-6 or abs(punto - lo) < 1e-6:
+                lado = "derecha" if abs(punto - hi) < 1e-6 else "izquierda"
+                return Discontinuidad(
+                    punto, TipoDiscontinuidad.NO_DEFINIDA_EN_DOMINIO,
+                    limite_izq, limite_der,
+                    detalle=f"la función no toma valores reales en el tramo "
+                    f"({lo:.6g}, {hi:.6g}) contenido en [a, b]; "
+                    f"x = {punto:.6g} es la frontera {lado} de ese tramo"
+                )
 
         return Discontinuidad(
             punto, TipoDiscontinuidad.INDETERMINABLE, limite_izq, limite_der,
@@ -266,15 +358,19 @@ class AnalizadorIntegrabilidad:
         ReporteIntegrabilidad
         """
         if a >= b:
-            raise ValueError("Se requiere a < b para definir el intervalo [a, b].")
+            raise ValueError(
+                "Se requiere a < b para definir el intervalo [a, b].")
+
+        intervalos_excluidos = self._intervalos_fuera_de_dominio(a, b)
 
         candidatos = set(self._candidatos_singularidad_simbolicos(a, b))
-        candidatos.update(self._candidatos_numericos(a, b))
+        candidatos.update(self._candidatos_numericos(
+            a, b, intervalos_excluidos))
         # Descartar candidatos que estén prácticamente en un mismo punto.
         candidatos = _deduplicar(sorted(candidatos), tol=1e-6)
 
         discontinuidades = [
-            self._clasificar_punto(p, a, b) for p in candidatos
+            self._clasificar_punto(p, a, b, intervalos_excluidos) for p in candidatos
         ]
 
         definida_en_todo = len(discontinuidades) == 0
@@ -285,8 +381,13 @@ class AnalizadorIntegrabilidad:
         hay_indeterminables = any(
             d.tipo == TipoDiscontinuidad.INDETERMINABLE for d in discontinuidades
         )
+        hay_fuera_de_dominio = any(
+            d.tipo == TipoDiscontinuidad.NO_DEFINIDA_EN_DOMINIO for d in discontinuidades
+        )
 
-        es_integrable_propia = not hay_infinitas and not hay_indeterminables
+        es_integrable_propia = (
+            not hay_infinitas and not hay_indeterminables and not hay_fuera_de_dominio
+        )
         requiere_impropia = hay_infinitas
 
         # Si hay asíntotas verticales, se intenta verificar convergencia
@@ -336,6 +437,21 @@ class AnalizadorIntegrabilidad:
                     "el área entre las curvas no está definida (es infinita) "
                     "en ese subintervalo."
                 )
+        elif hay_fuera_de_dominio and not hay_indeterminables:
+            tramos_str = ", ".join(
+                f"({lo:.6g}, {hi:.6g})" for lo, hi in intervalos_excluidos
+            )
+            justificacion = (
+                f"La función no toma valores reales en todo [a, b]: queda "
+                f"fuera de su dominio real en el/los tramo(s) {tramos_str}. "
+                f"Por lo tanto la integral propia sobre TODO [a, b] no "
+                f"existe en el sentido clásico (el integrando ni siquiera "
+                f"está definido ahí); solo puede calcularse sobre la parte "
+                f"de [a, b] que sí pertenece al dominio real de la función. "
+                f"Se recomienda restringir el intervalo de integración a "
+                f"ese dominio."
+            )
+            es_integrable = False
         else:
             justificacion = (
                 "No fue posible clasificar automáticamente todas las "
@@ -391,8 +507,8 @@ def _deduplicar(valores, tol=1e-6):
 
 
 def _verificar_convergencia_impropia(funcion: FuncionMatematica, a: float,
-                                      b: float, punto_singular: float,
-                                      epsilon: float = 1e-6) -> bool:
+                                     b: float, punto_singular: float,
+                                     epsilon: float = 1e-6) -> bool:
     """
     Verifica si la integral impropia de `funcion` en [a, b], con una
     asíntota vertical en `punto_singular`, converge, evaluando el
@@ -414,8 +530,10 @@ def _verificar_convergencia_impropia(funcion: FuncionMatematica, a: float,
             valor = sp.limit(antiderivada.subs(x, b - eps), eps, 0, dir="+")
             resultado = valor - antiderivada.subs(x, a)
         else:
-            lim_izq = sp.limit(antiderivada.subs(x, punto_singular - eps), eps, 0, dir="+")
-            lim_der = sp.limit(antiderivada.subs(x, punto_singular + eps), eps, 0, dir="+")
+            lim_izq = sp.limit(antiderivada.subs(
+                x, punto_singular - eps), eps, 0, dir="+")
+            lim_der = sp.limit(antiderivada.subs(
+                x, punto_singular + eps), eps, 0, dir="+")
             resultado = (lim_izq - antiderivada.subs(x, a)) + \
                         (antiderivada.subs(x, b) - lim_der)
         return bool(sp.im(resultado) == 0) and resultado.is_finite is not False
@@ -424,7 +542,7 @@ def _verificar_convergencia_impropia(funcion: FuncionMatematica, a: float,
 
 
 def _verificar_convergencia_numerica(funcion: FuncionMatematica, a: float,
-                                      b: float, punto_singular: float) -> bool:
+                                     b: float, punto_singular: float) -> bool:
     """Respaldo numérico: evalúa si la integral truncada cerca de la
     singularidad se estabiliza (converge) al reducir progresivamente el
     margen epsilon, usando scipy.integrate.quad."""
@@ -443,8 +561,10 @@ def _verificar_convergencia_numerica(funcion: FuncionMatematica, a: float,
             elif abs(punto_singular - b) < 1e-9:
                 val, _ = sci_integrate.quad(f_escalar, a, b - eps, limit=200)
             else:
-                v1, _ = sci_integrate.quad(f_escalar, a, punto_singular - eps, limit=200)
-                v2, _ = sci_integrate.quad(f_escalar, punto_singular + eps, b, limit=200)
+                v1, _ = sci_integrate.quad(
+                    f_escalar, a, punto_singular - eps, limit=200)
+                v2, _ = sci_integrate.quad(
+                    f_escalar, punto_singular + eps, b, limit=200)
                 val = v1 + v2
             valores.append(val)
         except Exception:

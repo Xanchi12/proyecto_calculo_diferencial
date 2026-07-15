@@ -96,7 +96,8 @@ class IntegradorNumerico:
         hstep = (b - a) / n
         suma_impares = np.sum(ys[1:-1:2])   # coeficientes 4
         suma_pares = np.sum(ys[2:-1:2])     # coeficientes 2
-        valor = (hstep / 3) * (ys[0] + ys[-1] + 4 * suma_impares + 2 * suma_pares)
+        valor = (hstep / 3) * (ys[0] + ys[-1] +
+                               4 * suma_impares + 2 * suma_pares)
         return ResultadoIntegracion("Simpson 1/3 compuesto", valor, n + 1)
 
     def simpson_3_8(self, a: float, b: float, n: int = 999) -> ResultadoIntegracion:
@@ -138,11 +139,12 @@ class IntegradorNumerico:
             R[i, 0] = resultado_trap.valor
             n_evals += resultado_trap.n_evaluaciones
             for k in range(1, i + 1):
-                R[i, k] = R[i, k - 1] + (R[i, k - 1] - R[i - 1, k - 1]) / (4 ** k - 1)
+                R[i, k] = R[i, k - 1] + \
+                    (R[i, k - 1] - R[i - 1, k - 1]) / (4 ** k - 1)
         return ResultadoIntegracion("Romberg", R[niveles - 1, niveles - 1], n_evals)
 
     def monte_carlo(self, a: float, b: float, n: int = 200_000,
-                     semilla: int = 42) -> ResultadoIntegracion:
+                    semilla: int = 42) -> ResultadoIntegracion:
         """Integración por Monte Carlo simple (muestreo uniforme)."""
         rng = np.random.default_rng(semilla)
         xs = rng.uniform(a, b, n)
@@ -153,7 +155,7 @@ class IntegradorNumerico:
 
     # ------------------------------------------------------------------
     def referencia_alta_precision(self, a: float, b: float,
-                                   puntos_criticos=None) -> ResultadoIntegracion:
+                                  puntos_criticos=None) -> ResultadoIntegracion:
         """
         Calcula un valor de referencia de muy alta precisión con
         cuadratura adaptativa de Gauss-Kronrod (scipy.integrate.quad),
@@ -173,7 +175,7 @@ class IntegradorNumerico:
 
     # ------------------------------------------------------------------
     def comparar_metodos(self, a: float, b: float, puntos_criticos=None,
-                          n_trapecio=2000, n_simpson=2000, n_gauss=30):
+                         n_trapecio=2000, n_simpson=2000, n_gauss=30):
         """
         Ejecuta todos los métodos y calcula el error de cada uno frente
         a la referencia de alta precisión.
@@ -187,7 +189,8 @@ class IntegradorNumerico:
         metodos = [
             self.trapecio(a, b, n_trapecio),
             self.simpson_1_3(a, b, n_simpson),
-            self.simpson_3_8(a, b, n_simpson if n_simpson % 3 == 0 else n_simpson + (3 - n_simpson % 3)),
+            self.simpson_3_8(a, b, n_simpson if n_simpson %
+                             3 == 0 else n_simpson + (3 - n_simpson % 3)),
             self.gauss_legendre(a, b, n_gauss),
             self.romberg(a, b, niveles=7),
             self.monte_carlo(a, b, n=300_000),
@@ -198,7 +201,7 @@ class IntegradorNumerico:
         return referencia, metodos
 
     def analisis_convergencia(self, a: float, b: float, metodo: str = "simpson",
-                               valores_n=(4, 8, 16, 32, 64, 128, 256, 512, 1024)):
+                              valores_n=(4, 8, 16, 32, 64, 128, 256, 512, 1024)):
         """
         Analiza cómo decrece el error del método elegido a medida que
         aumenta el número de subintervalos n, útil para justificar el

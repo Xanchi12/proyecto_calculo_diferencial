@@ -42,7 +42,8 @@ def _leer_funciones(datos: dict):
     a = float(datos.get("a"))
     b = float(datos.get("b"))
     if a >= b:
-        raise ValueError("El extremo izquierdo (a) debe ser menor que el derecho (b).")
+        raise ValueError(
+            "El extremo izquierdo (a) debe ser menor que el derecho (b).")
     f = FuncionMatematica(f_str, nombre="f")
     g = FuncionMatematica(g_str, nombre="g")
     return f, g, a, b
@@ -134,7 +135,7 @@ def api_area():
         "infinita" in d.tipo.value
         for s in resultado.subintervalos
         for d in (s.reporte_integrabilidad_f.discontinuidades +
-                   s.reporte_integrabilidad_g.discontinuidades)
+                  s.reporte_integrabilidad_g.discontinuidades)
     )
 
     imagen_convergencia = None
@@ -145,7 +146,8 @@ def api_area():
             return np.abs(fx - gx)
         integrador = IntegradorNumerico(h_abs)
         convergencia = integrador.analisis_convergencia(a, b, metodo="simpson")
-        imagen_convergencia = convergencia_a_base64(convergencia, metodo_nombre="Simpson 1/3")
+        imagen_convergencia = convergencia_a_base64(
+            convergencia, metodo_nombre="Simpson 1/3")
 
     return jsonify({
         "area_total": resultado.area_total if np.isfinite(resultado.area_total) else None,

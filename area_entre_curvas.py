@@ -79,7 +79,8 @@ class ResultadoAreaEntreCurvas:
             "",
         ]
         if self.intersecciones:
-            lineas.append(f"Intersecciones encontradas ({len(self.intersecciones)}):")
+            lineas.append(
+                f"Intersecciones encontradas ({len(self.intersecciones)}):")
             for p in self.intersecciones:
                 lineas.append(f"   - {p}")
         else:
@@ -92,12 +93,14 @@ class ResultadoAreaEntreCurvas:
         for s in self.subintervalos:
             lineas.append("   " + s.resumen())
         lineas.append("")
-        lineas.append(f"ÁREA TOTAL (suma de áreas parciales) = {self.area_total:.8f}")
+        lineas.append(
+            f"ÁREA TOTAL (suma de áreas parciales) = {self.area_total:.8f}")
         lineas.append(
             f"Valor de referencia de alta precisión   = "
             f"{self.referencia_alta_precision:.8f}"
         )
-        lineas.append(f"Error absoluto estimado                 = {self.error_estimado:.3e}")
+        lineas.append(
+            f"Error absoluto estimado                 = {self.error_estimado:.3e}")
         return "\n".join(lineas)
 
 
@@ -119,7 +122,8 @@ class CalculadoraAreaEntreCurvas:
         """
         centro = (x_izq + x_der) / 2
         ancho = x_der - x_izq
-        offsets = [0.0, 1e-6 * ancho, -1e-6 * ancho, 1e-3 * ancho, -1e-3 * ancho]
+        offsets = [0.0, 1e-6 * ancho, -1e-6 *
+                   ancho, 1e-3 * ancho, -1e-3 * ancho]
         for off in offsets:
             x_prueba = centro + off
             if not (x_izq < x_prueba < x_der) and off != 0.0:
@@ -199,6 +203,35 @@ class CalculadoraAreaEntreCurvas:
                 for d in (rep_f.discontinuidades + rep_g.discontinuidades)
             )
 
+            # ¿Este subintervalo completo cae fuera del dominio real de
+            # f o de g (p. ej. sqrt(4-x**2) para x fuera de [-2, 2], o
+            # log(x) para x <= 0)? Se detecta porque AMBOS extremos del
+            # subintervalo quedan marcados como NO_DEFINIDA_EN_DOMINIO
+            # en el reporte de integrabilidad de ese mismo subintervalo
+            # (si solo uno de los extremos lo estuviera, el otro lado sí
+            # tendría valores reales y no sería este caso). No se
+            # integra numéricamente: dejar que Trapecio/Simpson/etc.
+            # evalúen ahí y confiar en que `nan_to_num(..., nan=0.0)`
+            # "arregle" el resultado sería implícito y frágil, y además
+            # rompe la referencia de alta precisión (scipy.integrate.quad
+            # no tolera evaluar la función en la zona compleja).
+            fuera_de_dominio = (not tocando_asintota) and any(
+                d.tipo.value == "fuera del dominio real" and
+                (abs(d.punto - x_izq) < 1e-6 or abs(d.punto - x_der) < 1e-6)
+                for d in (rep_f.discontinuidades + rep_g.discontinuidades)
+            )
+
+            if fuera_de_dominio:
+                subintervalos.append(SubintervaloArea(
+                    x_izq=x_izq, x_der=x_der, funcion_dominante=dominante,
+                    reporte_integrabilidad_f=rep_f, reporte_integrabilidad_g=rep_g,
+                    area_parcial=0.0,
+                    metodo_usado="Subintervalo fuera del dominio real de f o g: "
+                                 "no se integra (no hay valores reales que sumar "
+                                 "al área en este tramo)",
+                ))
+                continue
+
             if tocando_asintota:
                 convergente = rep_f.es_integrable and rep_g.es_integrable
                 if not convergente:
@@ -217,8 +250,10 @@ class CalculadoraAreaEntreCurvas:
                     # extremo exacto de la singularidad mediante un
                     # margen infinitesimal, en vez de una malla fija que
                     # produciría NaN/Inf justo en ese punto.
-                    izq_eval = x_izq + margen_singularidad * max(1.0, abs(x_der - x_izq))
-                    der_eval = x_der - margen_singularidad * max(1.0, abs(x_der - x_izq))
+                    izq_eval = x_izq + margen_singularidad * \
+                        max(1.0, abs(x_der - x_izq))
+                    der_eval = x_der - margen_singularidad * \
+                        max(1.0, abs(x_der - x_izq))
                     izq_eval = min(izq_eval, der_eval)
                     from scipy import integrate as sci_integrate
                     valor, _ = sci_integrate.quad(
@@ -247,7 +282,8 @@ class CalculadoraAreaEntreCurvas:
                 raise ValueError(f"Método desconocido: {metodo}")
 
             if metodo in ("trapecio", "simpson_1_3", "simpson_3_8"):
-                resultado_parcial = metodo_funcs[metodo](x_izq, x_der, n_por_subintervalo)
+                resultado_parcial = metodo_funcs[metodo](
+                    x_izq, x_der, n_por_subintervalo)
             else:
                 resultado_parcial = metodo_funcs[metodo](x_izq, x_der)
 
@@ -265,8 +301,18 @@ class CalculadoraAreaEntreCurvas:
             "infinita" in d.tipo.value
             for d in (reporte_global_f.discontinuidades + reporte_global_g.discontinuidades)
         )
+        # Igual que con las asíntotas: si f o g no toman valores reales
+        # en parte de [a, b], una cuadratura global (adaptativa como
+        # Gauss-Kronrod, o de malla fija) sobre TODO [a, b] evaluaría la
+        # función en la zona compleja y devolvería NaN, invalidando la
+        # referencia y la comparación de métodos. El área total ya se
+        # calculó correctamente subintervalo a subintervalo arriba.
+        hay_fuera_de_dominio = len(puntos_discontinuidad) > 0 and any(
+            d.tipo.value == "fuera del dominio real"
+            for d in (reporte_global_f.discontinuidades + reporte_global_g.discontinuidades)
+        )
 
-        if area_total == float("inf") or hay_asintotas:
+        if area_total == float("inf") or hay_asintotas or hay_fuera_de_dominio:
             # La comparación "ingenua" de métodos de malla fija
             # (Trapecio, Simpson, etc.) sobre TODO [a, b] no es
             # confiable cuando existe una asíntota vertical dentro del

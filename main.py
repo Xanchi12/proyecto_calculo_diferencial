@@ -76,13 +76,18 @@ def construir_parser() -> argparse.ArgumentParser:
         description="Calcula el área entre dos curvas, analizando "
                     "integrabilidad, intersecciones y aproximación numérica."
     )
-    parser.add_argument("--f", type=str, help="Expresión de f(x), p. ej. 'x**2 - 1'")
-    parser.add_argument("--g", type=str, help="Expresión de g(x), p. ej. 'sin(x)'")
-    parser.add_argument("--a", type=float, help="Extremo izquierdo del intervalo")
-    parser.add_argument("--b", type=float, help="Extremo derecho del intervalo")
+    parser.add_argument(
+        "--f", type=str, help="Expresión de f(x), p. ej. 'x**2 - 1'")
+    parser.add_argument(
+        "--g", type=str, help="Expresión de g(x), p. ej. 'sin(x)'")
+    parser.add_argument("--a", type=float,
+                        help="Extremo izquierdo del intervalo")
+    parser.add_argument("--b", type=float,
+                        help="Extremo derecho del intervalo")
     parser.add_argument(
         "--metodo", type=str, default="simpson_1_3",
-        choices=["trapecio", "simpson_1_3", "simpson_3_8", "gauss_legendre", "romberg"],
+        choices=["trapecio", "simpson_1_3",
+                 "simpson_3_8", "gauss_legendre", "romberg"],
         help="Método numérico a usar para el área (por defecto: simpson_1_3)",
     )
     parser.add_argument(
@@ -118,10 +123,10 @@ def pedir_datos_interactivo():
 
 
 def ejecutar_analisis(f_str: str, g_str: str, a: float, b: float,
-                       metodo: str = "simpson_1_3",
-                       ruta_salida: str = "area_entre_curvas.png",
-                       graficar: bool = True,
-                       abrir_navegador: bool = True):
+                      metodo: str = "simpson_1_3",
+                      ruta_salida: str = "area_entre_curvas.png",
+                      graficar: bool = True,
+                      abrir_navegador: bool = True):
     """Corre el flujo completo de la actividad y muestra los resultados
     en consola (y opcionalmente genera la gráfica)."""
 
@@ -190,9 +195,11 @@ def ejecutar_analisis(f_str: str, g_str: str, a: float, b: float,
                 return np.abs(fx - gx)
 
             integrador = IntegradorNumerico(h_abs)
-            convergencia = integrador.analisis_convergencia(a, b, metodo="simpson")
+            convergencia = integrador.analisis_convergencia(
+                a, b, metodo="simpson")
             ruta_conv = graficar_convergencia(
-                convergencia, ruta_salida=ruta_salida.replace(".png", "_convergencia.png"),
+                convergencia, ruta_salida=ruta_salida.replace(
+                    ".png", "_convergencia.png"),
                 metodo_nombre="Simpson 1/3",
             )
             print(f"Gráfica de convergencia guardada en: {ruta_conv}")

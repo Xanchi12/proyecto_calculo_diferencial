@@ -9,6 +9,9 @@ los puntos de intersección y cualquier discontinuidad relevante.
 """
 
 from __future__ import annotations
+from area_entre_curvas import ResultadoAreaEntreCurvas
+from funciones import FuncionMatematica
+import matplotlib.pyplot as plt
 
 import base64
 import io
@@ -16,15 +19,11 @@ import io
 import numpy as np
 import matplotlib
 matplotlib.use("Agg")  # backend sin ventana, apto para entornos sin GUI
-import matplotlib.pyplot as plt
-
-from funciones import FuncionMatematica
-from area_entre_curvas import ResultadoAreaEntreCurvas
 
 
 def _construir_figura_area(resultado: ResultadoAreaEntreCurvas,
-                            puntos_malla: int = 2000,
-                            mostrar_subareas: bool = True):
+                           puntos_malla: int = 2000,
+                           mostrar_subareas: bool = True):
     """Construye (sin guardar) la figura de matplotlib del área entre
     curvas. Función compartida por `graficar_area_entre_curvas` (que la
     guarda en disco) y `area_entre_curvas_a_base64` (que la codifica
@@ -41,13 +40,17 @@ def _construir_figura_area(resultado: ResultadoAreaEntreCurvas,
 
     fig, ax = plt.subplots(figsize=(10, 6.5), dpi=150)
 
-    ax.plot(xs, ys_f, label=f"${f.nombre}(x) = {_a_latex(f)}$", color="#1f77b4", linewidth=2)
-    ax.plot(xs, ys_g, label=f"${g.nombre}(x) = {_a_latex(g)}$", color="#d62728", linewidth=2)
+    ax.plot(
+        xs, ys_f, label=f"${f.nombre}(x) = {_a_latex(f)}$", color="#1f77b4", linewidth=2)
+    ax.plot(
+        xs, ys_g, label=f"${g.nombre}(x) = {_a_latex(g)}$", color="#d62728", linewidth=2)
 
-    colores_subareas = plt.cm.viridis(np.linspace(0.15, 0.85, max(len(resultado.subintervalos), 1)))
+    colores_subareas = plt.cm.viridis(np.linspace(
+        0.15, 0.85, max(len(resultado.subintervalos), 1)))
 
     for idx, sub in enumerate(resultado.subintervalos):
-        xs_sub = np.linspace(sub.x_izq, sub.x_der, max(int(puntos_malla / max(len(resultado.subintervalos), 1)), 50))
+        xs_sub = np.linspace(sub.x_izq, sub.x_der, max(
+            int(puntos_malla / max(len(resultado.subintervalos), 1)), 50))
         yf_sub = f_num(xs_sub)
         yg_sub = g_num(xs_sub)
         color = colores_subareas[idx] if mostrar_subareas else "#7f7f7f"
@@ -96,9 +99,9 @@ def _construir_figura_area(resultado: ResultadoAreaEntreCurvas,
 
 
 def graficar_area_entre_curvas(resultado: ResultadoAreaEntreCurvas,
-                                ruta_salida: str = "area_entre_curvas.png",
-                                puntos_malla: int = 2000,
-                                mostrar_subareas: bool = True):
+                               ruta_salida: str = "area_entre_curvas.png",
+                               puntos_malla: int = 2000,
+                               mostrar_subareas: bool = True):
     """
     Genera y guarda en disco una figura con las curvas, el área
     sombreada por subintervalo, los puntos de intersección y las
@@ -111,8 +114,8 @@ def graficar_area_entre_curvas(resultado: ResultadoAreaEntreCurvas,
 
 
 def area_entre_curvas_a_base64(resultado: ResultadoAreaEntreCurvas,
-                                puntos_malla: int = 2000,
-                                mostrar_subareas: bool = True) -> str:
+                               puntos_malla: int = 2000,
+                               mostrar_subareas: bool = True) -> str:
     """
     Igual que `graficar_area_entre_curvas`, pero en vez de guardar un
     archivo en disco devuelve la imagen codificada en base64, lista
@@ -129,12 +132,13 @@ def area_entre_curvas_a_base64(resultado: ResultadoAreaEntreCurvas,
 
 
 def _construir_figura_convergencia(resultados_convergencia,
-                                    metodo_nombre="Simpson 1/3"):
+                                   metodo_nombre="Simpson 1/3"):
     ns = np.array([r[0] for r in resultados_convergencia], dtype=float)
     errores = np.array([max(r[2], 1e-16) for r in resultados_convergencia])
 
     fig, ax = plt.subplots(figsize=(7.5, 5.5), dpi=150)
-    ax.loglog(ns, errores, "o-", color="#2ca02c", label=f"Error {metodo_nombre}")
+    ax.loglog(ns, errores, "o-", color="#2ca02c",
+              label=f"Error {metodo_nombre}")
 
     orden_teorico = 4 if "simpson" in metodo_nombre.lower() else 2
     referencia = errores[0] * (ns[0] / ns) ** orden_teorico
@@ -151,7 +155,7 @@ def _construir_figura_convergencia(resultados_convergencia,
 
 
 def graficar_convergencia(resultados_convergencia, ruta_salida="convergencia.png",
-                           metodo_nombre="Simpson 1/3"):
+                          metodo_nombre="Simpson 1/3"):
     """
     Grafica en escala log-log el error absoluto de un método numérico
     en función del número de subintervalos n, para visualizar
@@ -164,7 +168,8 @@ def graficar_convergencia(resultados_convergencia, ruta_salida="convergencia.png
         Salida de `IntegradorNumerico.analisis_convergencia`: lista de
         (n, valor_aproximado, error_absoluto).
     """
-    fig = _construir_figura_convergencia(resultados_convergencia, metodo_nombre)
+    fig = _construir_figura_convergencia(
+        resultados_convergencia, metodo_nombre)
     fig.savefig(ruta_salida)
     plt.close(fig)
     return ruta_salida
@@ -173,7 +178,8 @@ def graficar_convergencia(resultados_convergencia, ruta_salida="convergencia.png
 def convergencia_a_base64(resultados_convergencia, metodo_nombre="Simpson 1/3") -> str:
     """Igual que `graficar_convergencia`, pero devuelve la imagen
     codificada en base64 en vez de guardarla en disco."""
-    fig = _construir_figura_convergencia(resultados_convergencia, metodo_nombre)
+    fig = _construir_figura_convergencia(
+        resultados_convergencia, metodo_nombre)
     buffer = io.BytesIO()
     fig.savefig(buffer, format="png")
     plt.close(fig)
