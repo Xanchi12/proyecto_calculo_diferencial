@@ -21,6 +21,37 @@ import matplotlib
 matplotlib.use("Agg")  # backend sin ventana, apto para entornos sin GUI
 
 
+def _limites_y_robustos(*arrays_y, margen_relativo: float = 0.15):
+    """
+    Calcula límites (y_min, y_max) razonables para el eje Y a partir de
+    uno o más arreglos de valores, usando percentiles en vez del
+    mínimo/máximo absoluto.
+
+    Esto es indispensable cuando la función tiene una asíntota vertical
+    dentro del intervalo graficado: cerca de la singularidad, la malla
+    de puntos toma valores enormes (p. ej. ~10^6 para 1/x² a un paso de
+    0.0015 del cero), y si se deja que matplotlib autoescale el eje Y a
+    ese máximo, el resto de la curva —y el área sombreada— se aplasta
+    en una línea plana pegada al cero, haciendo la gráfica ilegible.
+    Usar el percentil 2/98 en vez del extremo absoluto conserva el
+    comportamiento "interesante" de la función (sus valores típicos)
+    sin que unos pocos puntos cercanos a la asíntota dominen la escala.
+    """
+    valores = np.concatenate([
+        np.asarray(a)[np.isfinite(a)] for a in arrays_y if np.asarray(a).size
+    ])
+    valores = valores[np.isfinite(valores)]
+    if valores.size == 0:
+        return -1.0, 1.0
+
+    y_lo = np.percentile(valores, 2)
+    y_hi = np.percentile(valores, 98)
+    if y_hi - y_lo < 1e-9:
+        y_lo, y_hi = y_lo - 1.0, y_hi + 1.0
+    margen = margen_relativo * (y_hi - y_lo)
+    return y_lo - margen, y_hi + margen
+
+
 def _construir_figura_area(resultado: ResultadoAreaEntreCurvas,
                            puntos_malla: int = 2000,
                            mostrar_subareas: bool = True):
@@ -37,6 +68,13 @@ def _construir_figura_area(resultado: ResultadoAreaEntreCurvas,
     g_num = g.funcion_numerica()
     ys_f = f_num(xs)
     ys_g = g_num(xs)
+
+    hay_asintota_vertical = any(
+        "infinita" in d.tipo.value
+        for sub in resultado.subintervalos
+        for d in (sub.reporte_integrabilidad_f.discontinuidades +
+                  sub.reporte_integrabilidad_g.discontinuidades)
+    )
 
     fig, ax = plt.subplots(figsize=(10, 6.5), dpi=150)
 
@@ -74,16 +112,44 @@ def _construir_figura_area(resultado: ResultadoAreaEntreCurvas,
                 fontsize=8.5,
             )
 
-    # Discontinuidades detectadas (si las hay) marcadas con línea punteada
+    # Discontinuidades detectadas (removibles o de salto) marcadas con
+    # línea punteada gris. Las asíntotas verticales ("infinita") se
+    # marcan aparte, en rojo, junto con el ajuste de escala del eje Y
+    # (ver más abajo), para no dibujar dos líneas superpuestas en el
+    # mismo punto con estilos distintos.
     puntos_discontinuidad = set()
     for sub in resultado.subintervalos:
         for d in (sub.reporte_integrabilidad_f.discontinuidades +
                   sub.reporte_integrabilidad_g.discontinuidades):
-            puntos_discontinuidad.add(round(d.punto, 8))
+            if "infinita" not in d.tipo.value:
+                puntos_discontinuidad.add(round(d.punto, 8))
     for xp in puntos_discontinuidad:
         ax.axvline(xp, color="gray", linestyle=":", linewidth=1.2, alpha=0.8)
 
     ax.set_xlim(a - margen, b + margen)
+
+    if hay_asintota_vertical:
+        # Sin este ajuste, matplotlib autoescala el eje Y hasta el
+        # valor máximo de la malla (que cerca de una asíntota vertical
+        # puede ser de millones), y toda la parte "interesante" de la
+        # curva queda aplastada contra el eje x. Se usa un rango
+        # robusto por percentiles y se marca la asíntota explícitamente
+        # con una línea vertical y una anotación, en vez de dejar que
+        # el pico gigantesco hable por sí solo (y mal).
+        y_lo, y_hi = _limites_y_robustos(ys_f, ys_g)
+        ax.set_ylim(y_lo, y_hi)
+        for d in {round(d.punto, 8) for sub in resultado.subintervalos
+                  for d in (sub.reporte_integrabilidad_f.discontinuidades +
+                            sub.reporte_integrabilidad_g.discontinuidades)
+                  if "infinita" in d.tipo.value}:
+            ax.axvline(d, color="#b23b3b", linestyle="--",
+                       linewidth=1.4, alpha=0.85, zorder=4)
+            ax.annotate(
+                f"asíntota vertical\nx = {d:.4g}",
+                (d, y_hi), textcoords="offset points", xytext=(6, -14),
+                fontsize=8, color="#b23b3b",
+            )
+
     ax.set_xlabel("x")
     ax.set_ylabel("y")
     ax.set_title(

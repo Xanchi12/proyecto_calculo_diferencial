@@ -21,10 +21,10 @@ finito de puntos siempre tiene medida cero.
 
 Cuando la función no está acotada (tiene una asíntota vertical) dentro del
 intervalo, ya no es Riemann-integrable en sentido estricto, pero muchas veces
-el área sigue pudiéndose calcular tratando la integral como *impropia*: se
+el área sigue pudiéndose calcular tratando la integral como _impropia_: se
 integra hasta un punto cercano a la asíntota y se toma el límite cuando ese
 punto se acerca a la singularidad. Si ese límite existe y es finito, se dice
-que la integral impropia *converge*; si no, *diverge* y el área no está
+que la integral impropia _converge_; si no, _diverge_ y el área no está
 definida (es infinita).
 
 ## 2. ¿Cuál es la diferencia entre área y valor de la integral?
@@ -51,7 +51,7 @@ Depende del tipo de discontinuidad:
   valor de la función, o la función no está definida en ese punto puntual):
   no afecta la integrabilidad ni el valor de la integral, porque cambiar el
   valor de una función en un solo punto no cambia el área bajo la curva. Sin
-  embargo, sí puede causar errores *numéricos*: si un método de integración
+  embargo, sí puede causar errores _numéricos_: si un método de integración
   con malla fija evalúa exactamente en ese punto, puede obtener `NaN` o un
   valor erróneo si no se maneja con cuidado (en este proyecto se resuelve
   ignorando esos puntos o partiendo el intervalo justo ahí).
@@ -150,7 +150,7 @@ cada paso:
    sentido (`NaN`, `inf`) exactamente en los puntos donde el análisis
    matemático predice que hay que tener cuidado.
 
-En resumen: el código no reemplaza el análisis matemático, lo *automatiza*
+En resumen: el código no reemplaza el análisis matemático, lo _automatiza_
 una vez que ese análisis ya identificó dónde están los puntos delicados
 (intersecciones, discontinuidades, asíntotas). Un programa que calcule áreas
 "a ciegas", sin ese análisis previo, puede parecer que funciona en los casos

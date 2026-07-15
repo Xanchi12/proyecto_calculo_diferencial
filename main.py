@@ -36,7 +36,7 @@ from funciones import FuncionMatematica, ErrorFuncionInvalida
 from integrabilidad import AnalizadorIntegrabilidad
 from area_entre_curvas import CalculadoraAreaEntreCurvas
 from visualizacion import graficar_area_entre_curvas, graficar_convergencia
-from integracion_numerica import IntegradorNumerico
+from integracion_numerica import IntegradorNumerico, construir_integrando_absoluto
 
 
 def abrir_en_navegador(ruta: str):
@@ -188,15 +188,14 @@ def ejecutar_analisis(f_str: str, g_str: str, a: float, b: float,
             for d in (reporte_f.discontinuidades + reporte_g.discontinuidades)
         )
         if not hay_asintotas:
-            def h_abs(xs):
-                fx = f.funcion_numerica()(xs)
-                gx = g.funcion_numerica()(xs)
-                import numpy as np
-                return np.abs(fx - gx)
-
-            integrador = IntegradorNumerico(h_abs)
+            puntos_criticos = sorted({
+                round(d.punto, 10)
+                for d in (reporte_f.discontinuidades + reporte_g.discontinuidades)
+            })
+            integrador = IntegradorNumerico(
+                construir_integrando_absoluto(f, g))
             convergencia = integrador.analisis_convergencia(
-                a, b, metodo="simpson")
+                a, b, metodo="simpson", puntos_criticos=puntos_criticos)
             ruta_conv = graficar_convergencia(
                 convergencia, ruta_salida=ruta_salida.replace(
                     ".png", "_convergencia.png"),

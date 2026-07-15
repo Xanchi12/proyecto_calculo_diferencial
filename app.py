@@ -28,10 +28,27 @@ from funciones import FuncionMatematica, ErrorFuncionInvalida
 from integrabilidad import AnalizadorIntegrabilidad
 from intersecciones import BuscadorIntersecciones
 from area_entre_curvas import CalculadoraAreaEntreCurvas
-from integracion_numerica import IntegradorNumerico
+from integracion_numerica import IntegradorNumerico, construir_integrando_absoluto
 from visualizacion import area_entre_curvas_a_base64, convergencia_a_base64
 
 app = Flask(__name__)
+
+
+def _finito_o_none(valor):
+    """
+    Convierte un valor numérico no finito (``inf``, ``-inf``, ``nan``) a
+    ``None`` antes de serializarlo a JSON.
+
+    Python (y por lo tanto `flask.jsonify`) permite por defecto los
+    literales no estándar ``Infinity``/``NaN`` en JSON, pero
+    ``JSON.parse`` en el navegador los rechaza (no son JSON válido según
+    el estándar). Sin este saneamiento, cualquier subintervalo con área
+    infinita (integral impropia divergente) rompía el `fetch(...).json()`
+    del frontend con el error "Unexpected token 'I' ... is not valid
+    JSON". Se aplica a TODO valor numérico que se envíe al cliente y que
+    pueda ser infinito o NaN.
+    """
+    return valor if np.isfinite(valor) else None
 
 
 def _leer_funciones(datos: dict):
@@ -115,7 +132,7 @@ def api_area():
         {
             "x_izq": s.x_izq, "x_der": s.x_der,
             "dominante": s.funcion_dominante,
-            "area_parcial": s.area_parcial,
+            "area_parcial": _finito_o_none(s.area_parcial),
             "metodo": s.metodo_usado,
         }
         for s in resultado.subintervalos
@@ -123,37 +140,59 @@ def api_area():
 
     metodos_comparados = [
         {
-            "metodo": m.metodo, "valor": m.valor,
-            "n": m.n_evaluaciones, "error": m.error_estimado,
+            "metodo": m.metodo, "valor": _finito_o_none(m.valor),
+            "n": m.n_evaluaciones, "error": _finito_o_none(m.error_estimado),
         }
         for m in resultado.metodos_comparados
     ]
 
     imagen_base64 = area_entre_curvas_a_base64(resultado)
 
-    hay_asintotas = any(
-        "infinita" in d.tipo.value
+    discontinuidades_globales = [
+        d
         for s in resultado.subintervalos
         for d in (s.reporte_integrabilidad_f.discontinuidades +
                   s.reporte_integrabilidad_g.discontinuidades)
+    ]
+    hay_asintotas = any(
+        "infinita" in d.tipo.value for d in discontinuidades_globales
+    )
+
+    hay_fuera_de_dominio = any(
+        d.tipo.value == "fuera del dominio real" for d in discontinuidades_globales
     )
 
     imagen_convergencia = None
-    if not hay_asintotas and np.isfinite(resultado.area_total):
-        def h_abs(xs):
-            fx = f.funcion_numerica()(xs)
-            gx = g.funcion_numerica()(xs)
-            return np.abs(fx - gx)
-        integrador = IntegradorNumerico(h_abs)
-        convergencia = integrador.analisis_convergencia(a, b, metodo="simpson")
+    if not hay_asintotas and not hay_fuera_de_dominio and np.isfinite(resultado.area_total):
+        # Se pasan las discontinuidades detectadas (removibles o de
+        # salto) como "puntos críticos" a la referencia de alta
+        # precisión. Sin esto, si el punto exacto de una discontinuidad
+        # removible coincide con un nodo de la cuadratura adaptativa,
+        # `scipy.integrate.quad` evalúa ahí, obtiene NaN y contamina
+        # TODA la tabla de convergencia (todas las filas quedan con
+        # error = NaN), lo que hace que matplotlib no dibuje ningún
+        # punto y la gráfica se vea vacía.
+        #
+        # El caso de dominio restringido (p. ej. sqrt(6-x**2) fuera de
+        # [-√6, √6]) necesita el mismo guard que ya se usa para saltar
+        # la tabla de comparación de métodos: aquí no basta con marcar
+        # el punto crítico, porque `quad` sigue evaluando la función en
+        # TRAMOS enteros donde no toma valores reales (no solo en un
+        # punto aislado), así que la referencia vuelve a dar NaN y la
+        # gráfica de convergencia sale vacía otra vez.
+        puntos_criticos = sorted(
+            {round(d.punto, 10) for d in discontinuidades_globales})
+        integrador = IntegradorNumerico(construir_integrando_absoluto(f, g))
+        convergencia = integrador.analisis_convergencia(
+            a, b, metodo="simpson", puntos_criticos=puntos_criticos)
         imagen_convergencia = convergencia_a_base64(
             convergencia, metodo_nombre="Simpson 1/3")
 
     return jsonify({
-        "area_total": resultado.area_total if np.isfinite(resultado.area_total) else None,
+        "area_total": _finito_o_none(resultado.area_total),
         "es_infinita": not np.isfinite(resultado.area_total),
-        "referencia": resultado.referencia_alta_precision if np.isfinite(resultado.referencia_alta_precision) else None,
-        "error_estimado": resultado.error_estimado,
+        "referencia": _finito_o_none(resultado.referencia_alta_precision),
+        "error_estimado": _finito_o_none(resultado.error_estimado),
         "subintervalos": subintervalos,
         "metodos_comparados": metodos_comparados,
         "imagen": imagen_base64,

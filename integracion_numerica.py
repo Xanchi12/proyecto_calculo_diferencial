@@ -42,6 +42,27 @@ from numpy.polynomial.legendre import leggauss
 from scipy import integrate as sci_integrate
 
 
+def construir_integrando_absoluto(f, g):
+    """
+    Construye la función vectorizada h(x) = |f(x) - g(x)|, lista para
+    pasarse a `IntegradorNumerico`.
+
+    Se centraliza aquí porque tanto `main.py` (modo consola) como
+    `app.py` (interfaz web) necesitan exactamente esta misma función
+    para generar la gráfica de convergencia (Parte 5); antes cada uno
+    definía su propia copia local `h_abs`, duplicando la lógica.
+
+    Parameters
+    ----------
+    f, g : FuncionMatematica
+    """
+    def h_abs(xs):
+        fx = f.funcion_numerica()(xs)
+        gx = g.funcion_numerica()(xs)
+        return np.abs(fx - gx)
+    return h_abs
+
+
 @dataclass
 class ResultadoIntegracion:
     metodo: str
@@ -201,19 +222,35 @@ class IntegradorNumerico:
         return referencia, metodos
 
     def analisis_convergencia(self, a: float, b: float, metodo: str = "simpson",
-                              valores_n=(4, 8, 16, 32, 64, 128, 256, 512, 1024)):
+                              valores_n=(4, 8, 16, 32, 64,
+                                         128, 256, 512, 1024),
+                              puntos_criticos=None):
         """
         Analiza cómo decrece el error del método elegido a medida que
         aumenta el número de subintervalos n, útil para justificar el
         orden de convergencia empírico observado (Parte 5: "Analizar
         el error de aproximación").
 
+        Parameters
+        ----------
+        puntos_criticos : list[float], opcional
+            Puntos donde el integrando puede no ser suave o no estar
+            definido (discontinuidades removibles, de salto, o
+            intersecciones), para que la referencia de alta precisión
+            (`scipy.integrate.quad`) los evite/parta ahí en vez de
+            arriesgarse a evaluar justo sobre un punto donde la función
+            no está definida. Sin esto, si un punto de discontinuidad
+            coincide con un nodo interno de la cuadratura adaptativa, la
+            referencia entera puede volverse NaN y contaminar todas las
+            filas de la tabla de convergencia.
+
         Returns
         -------
         list[tuple[int, float, float]]
             Lista de (n, valor_aproximado, error_absoluto).
         """
-        referencia = self.referencia_alta_precision(a, b).valor
+        referencia = self.referencia_alta_precision(
+            a, b, puntos_criticos=puntos_criticos).valor
         metodo = metodo.lower()
         func_metodo = {
             "trapecio": self.trapecio,
