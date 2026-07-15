@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Área entre Curvas — Calculadora Interactiva</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<style>
+  :root{
+    --papel: #fbfaf6;
+    --linea-cuadricula: #dfe6ee;
+    --margen-rojo: #c0564a;
+    --tinta: #1f3550;
+    --tinta-suave: #48607d;
+    --acento: #2f6f5e;
+    --acento-suave: #e4efeb;
+    --alerta: #b23b3b;
+    --alerta-fondo: #fbe9e7;
+    --borde: #c9d4e0;
+  }
+  *{ box-sizing: border-box; }
+  html{ scroll-behavior: smooth; }
+  body{
+    margin:0;
+    background:
+      linear-gradient(var(--linea-cuadricula) 1px, transparent 1px) 0 0/28px 28px,
+      linear-gradient(90deg, var(--linea-cuadricula) 1px, transparent 1px) 0 0/28px 28px,
+      var(--papel);
+    color: var(--tinta);
+    font-family: 'Inter', sans-serif;
+    line-height: 1.55;
+    min-height: 100vh;
+    padding-left: 64px;
+    position: relative;
+  }
+  body::before{
+    content:"";
+    position: fixed;
+    top:0; bottom:0; left:52px;
+    width:2px;
+    background: var(--margen-rojo);
+    opacity:.55;
+    z-index:0;
+  }
+  .envoltorio{ max-width: 980px; margin: 0 auto; padding: 48px 28px 96px; position:relative; z-index:1; }
+
+  header{ margin-bottom: 40px; }
+  .eyebrow{
+    font-family:'JetBrains Mono', monospace;
+    font-size: 12.5px; letter-spacing:.14em; text-transform:uppercase;
+    color: var(--acento); margin-bottom:10px; font-weight:600;
+  }
+  h1{
+    font-family:'Source Serif 4', serif;
+    font-weight:700;
+    font-size: clamp(28px, 4vw, 40px);
+    margin:0 0 10px;
+    color: var(--tinta);
+  }
+  .subtitulo{ color: var(--tinta-suave); font-size:15.5px; max-width:640px; }
+
+  .panel-formulario{
+    background: #ffffffcc;
+    border: 1px solid var(--borde);
+    border-radius: 10px;
+    padding: 28px 28px 24px;
+    margin-bottom: 40px;
+    box-shadow: 0 1px 3px rgba(31,53,80,.06);
+  }
+  .fila-form{
+    display:grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px 20px;
+    margin-bottom: 18px;
+  }
+  .fila-form.compacta{ grid-template-columns: repeat(4, 1fr); }
+  label{
+    display:block; font-size:12.5px; font-weight:600;
+    color: var(--tinta-suave); margin-bottom:6px;
+    font-family:'JetBrains Mono', monospace; letter-spacing:.02em;
+  }
+  input[type=text], input[type=number], select{
+    width:100%; padding:10px 12px; font-size:15px;
+    border:1.5px solid var(--borde); border-radius:6px;
+    font-family:'JetBrains Mono', monospace;
+    background:#fff; color: var(--tinta);
+    transition: border-color .15s ease;
+  }
+  input:focus, select:focus{
+    outline:none; border-color: var(--acento);
+  }
+  .ayuda-input{ font-size:11.5px; color:#8593a6; margin-top:5px; font-family:'Inter',sans-serif; }
+
+  .barra-acciones{ display:flex; align-items:center; gap:16px; margin-top: 6px; flex-wrap: wrap; }
+  button#btn-calcular{
+    background: var(--tinta); color:#fff; border:none;
+    padding: 12px 26px; border-radius:7px; font-size:15px; font-weight:600;
+    font-family:'Inter',sans-serif; cursor:pointer;
+    transition: background .15s ease, transform .1s ease;
+  }
+  button#btn-calcular:hover{ background:#152840; }
+  button#btn-calcular:active{ transform: scale(.98); }
+  button#btn-calcular:disabled{ background:#9fb0c3; cursor:progress; }
+  .ejemplos-rapidos{ font-size:13px; color:var(--tinta-suave); }
+  .ejemplos-rapidos button{
+    background:none; border:1px solid var(--borde); color:var(--tinta-suave);
+    padding:5px 10px; border-radius:5px; font-size:12.5px; cursor:pointer;
+    font-family:'JetBrains Mono', monospace; margin-left:6px;
+  }
+  .ejemplos-rapidos button:hover{ border-color: var(--acento); color:var(--acento); }
+
+  .banner-error{
+    display:none; background: var(--alerta-fondo); color: var(--alerta);
+    border:1px solid #e3b3ae; padding:13px 16px; border-radius:7px;
+    font-size:14px; margin-bottom:24px;
+  }
+
+  .seccion{
+    opacity:0; transform: translateY(10px);
+    transition: opacity .45s ease, transform .45s ease;
+    margin-bottom: 34px;
+    border-left: 3px solid var(--borde);
+    padding-left: 22px;
+  }
+  .seccion.visible{ opacity:1; transform: translateY(0); border-left-color: var(--acento); }
+  .seccion.pendiente{ display:none; }
+
+  .num-parte{
+    font-family:'JetBrains Mono', monospace; font-size:12px;
+    color: var(--acento); font-weight:600; letter-spacing:.08em;
+    text-transform:uppercase; margin-bottom:6px;
+  }
+  h2{
+    font-family:'Source Serif 4', serif; font-size:22px; font-weight:600;
+    margin: 0 0 14px; color: var(--tinta);
+  }
+  .spinner{
+    display:inline-block; width:14px; height:14px; border-radius:50%;
+    border:2px solid var(--borde); border-top-color: var(--acento);
+    animation: girar .7s linear infinite; margin-right:8px; vertical-align:-2px;
+  }
+  @keyframes girar{ to{ transform: rotate(360deg); } }
+  .estado-cargando{ color: var(--tinta-suave); font-size:14px; }
+
+  .tarjeta{
+    background:#fff; border:1px solid var(--borde); border-radius:8px;
+    padding:16px 18px; margin-bottom:12px;
+  }
+  .tarjeta.ok{ border-left:4px solid var(--acento); }
+  .tarjeta.mal{ border-left:4px solid var(--alerta); }
+  .tarjeta h3{ margin:0 0 8px; font-size:15px; font-family:'JetBrains Mono', monospace; }
+  .tarjeta p{ margin:4px 0; font-size:14px; color: var(--tinta-suave); }
+  .etiqueta{
+    display:inline-block; font-size:11px; font-weight:700; padding:2px 8px;
+    border-radius:20px; font-family:'JetBrains Mono', monospace;
+    text-transform:uppercase; letter-spacing:.03em;
+  }
+  .etiqueta.si{ background: var(--acento-suave); color: var(--acento); }
+  .etiqueta.no{ background: var(--alerta-fondo); color: var(--alerta); }
+
+  ul.lista-discontinuidades{ margin:8px 0 0; padding-left:18px; font-size:13.5px; color:var(--tinta-suave); }
+
+  table{ width:100%; border-collapse: collapse; font-size:13.5px; margin-top:8px; }
+  th, td{ text-align:left; padding:8px 10px; border-bottom:1px solid var(--borde); }
+  th{ font-family:'JetBrains Mono', monospace; font-size:11.5px; text-transform:uppercase; color:var(--tinta-suave); font-weight:600; }
+  td.num{ font-family:'JetBrains Mono', monospace; }
+
+  .resultado-area{
+    background: var(--acento-suave); border-radius:8px; padding:18px 22px;
+    margin-bottom:18px;
+  }
+  .resultado-area .valor-grande{
+    font-family:'Source Serif 4', serif; font-size:32px; font-weight:700;
+    color: var(--tinta);
+  }
+  .resultado-area .valor-grande.infinito{ color: var(--alerta); }
+  .resultado-area .detalle{ font-size:13px; color: var(--tinta-suave); margin-top:4px; }
+
+  .imagen-resultado{
+    width:100%; border-radius:8px; border:1px solid var(--borde);
+    margin-top:6px; display:block;
+  }
+  .imagenes-grid{ display:grid; grid-template-columns: 1fr; gap:20px; }
+
+  @media (max-width: 640px){
+    body{ padding-left: 26px; }
+    body::before{ left:16px; }
+    .fila-form, .fila-form.compacta{ grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="envoltorio">
+
+  <header>
+    <div class="eyebrow">Cálculo Integral · Actividad de recuperación</div>
+    <h1>Área entre Curvas — Calculadora Interactiva</h1>
+    <p class="subtitulo">
+      Ingresa f(x), g(x) y el intervalo [a, b]. Cada parte del análisis
+      (integrabilidad, intersecciones, área y gráfica) se calcula y se muestra
+      en esta misma página a medida que va terminando.
+    </p>
+  </header>
+
+  <div class="panel-formulario">
+    <form id="form-analisis">
+      <div class="fila-form">
+        <div>
+          <label for="input-f">f(x) =</label>
+          <input type="text" id="input-f" value="x**2" autocomplete="off">
+          <div class="ayuda-input">Sintaxis tipo Python: x**2, sin(x), sqrt(4-x**2), 1/(x-2)…</div>
+        </div>
+        <div>
+          <label for="input-g">g(x) =</label>
+          <input type="text" id="input-g" value="-x**2 + 4" autocomplete="off">
+          <div class="ayuda-input">Misma sintaxis que f(x).</div>
+        </div>
+      </div>
+      <div class="fila-form compacta">
+        <div>
+          <label for="input-a">a (extremo izq.)</label>
+          <input type="number" id="input-a" value="-3" step="any">
+        </div>
+        <div>
+          <label for="input-b">b (extremo der.)</label>
+          <input type="number" id="input-b" value="3" step="any">
+        </div>
+        <div style="grid-column: span 2;">
+          <label for="input-metodo">Método numérico</label>
+          <select id="input-metodo">
+            <option value="simpson_1_3" selected>Simpson 1/3</option>
+            <option value="trapecio">Trapecio</option>
+            <option value="simpson_3_8">Simpson 3/8</option>
+            <option value="gauss_legendre">Gauss-Legendre</option>
+            <option value="romberg">Romberg</option>
+          </select>
+        </div>
+      </div>
+      <div class="barra-acciones">
+        <button type="submit" id="btn-calcular">Calcular y graficar</button>
+        <span class="ejemplos-rapidos">
+          Ejemplos:
+          <button type="button" data-ej="1">Dos parábolas</button>
+          <button type="button" data-ej="2">Discont. removible</button>
+          <button type="button" data-ej="3">Asíntota convergente</button>
+          <button type="button" data-ej="4">Asíntota divergente</button>
+        </span>
+      </div>
+    </form>
+  </div>
+
+  <div class="banner-error" id="banner-error"></div>
+
+  <section class="seccion pendiente" id="seccion-2">
+    <div class="num-parte">Parte 2</div>
+    <h2>Análisis de integrabilidad</h2>
+    <div id="contenido-integrabilidad"></div>
+  </section>
+
+  <section class="seccion pendiente" id="seccion-3">
+    <div class="num-parte">Parte 3</div>
+    <h2>Intersecciones</h2>
+    <div id="contenido-intersecciones"></div>
+  </section>
+
+  <section class="seccion pendiente" id="seccion-4">
+    <div class="num-parte">Parte 4 y 5</div>
+    <h2>Área entre curvas y comparación de métodos</h2>
+    <div id="contenido-area"></div>
+  </section>
+
+  <section class="seccion pendiente" id="seccion-6">
+    <div class="num-parte">Parte 6</div>
+    <h2>Visualización</h2>
+    <div id="contenido-visualizacion"></div>
+  </section>
+
+</div>
+
+<script>
+const EJEMPLOS = {
+  "1": { f: "x**2", g: "-x**2 + 4", a: -3, b: 3 },
+  "2": { f: "(x**2 - 4)/(x - 2)", g: "x", a: -1, b: 5 },
+  "3": { f: "1/sqrt(Abs(x))", g: "0", a: -1, b: 1 },
+  "4": { f: "1/x**2", g: "0", a: -1, b: 2 },
+};
+
+document.querySelectorAll('.ejemplos-rapidos button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const ej = EJEMPLOS[btn.dataset.ej];
+    document.getElementById('input-f').value = ej.f;
+    document.getElementById('input-g').value = ej.g;
+    document.getElementById('input-a').value = ej.a;
+    document.getElementById('input-b').value = ej.b;
+  });
+});
+
+function mostrarSeccion(id){
+  const el = document.getElementById(id);
+  el.classList.remove('pendiente');
+  requestAnimationFrame(() => el.classList.add('visible'));
+}
+function ocultarTodas(){
+  ['seccion-2','seccion-3','seccion-4','seccion-6'].forEach(id => {
+    const el = document.getElementById(id);
+    el.classList.add('pendiente');
+    el.classList.remove('visible');
+  });
+}
+function renderMath(texto){
+  try {
+    return katex.renderToString(texto, {throwOnError: false});
+  } catch(e){ return texto; }
+}
+
+async function llamar(endpoint, datos){
+  const resp = await fetch(endpoint, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(datos),
+  });
+  const json = await resp.json();
+  if (!resp.ok) throw new Error(json.error || 'Error desconocido');
+  return json;
+}
+
+document.getElementById('form-analisis').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const datos = {
+    f: document.getElementById('input-f').value,
+    g: document.getElementById('input-g').value,
+    a: document.getElementById('input-a').value,
+    b: document.getElementById('input-b').value,
+    metodo: document.getElementById('input-metodo').value,
+  };
+
+  const boton = document.getElementById('btn-calcular');
+  const banner = document.getElementById('banner-error');
+  banner.style.display = 'none';
+  boton.disabled = true;
+  boton.textContent = 'Calculando…';
+  ocultarTodas();
+
+  try {
+    // ---- Parte 2: integrabilidad ----
+    document.getElementById('contenido-integrabilidad').innerHTML =
+      '<p class="estado-cargando"><span class="spinner"></span>Analizando continuidad y discontinuidades…</p>';
+    mostrarSeccion('seccion-2');
+    const rInteg = await llamar('/api/integrabilidad', datos);
+    pintarIntegrabilidad(rInteg);
+
+    // ---- Parte 3: intersecciones ----
+    document.getElementById('contenido-intersecciones').innerHTML =
+      '<p class="estado-cargando"><span class="spinner"></span>Buscando puntos donde f(x) = g(x)…</p>';
+    mostrarSeccion('seccion-3');
+    const rInter = await llamar('/api/intersecciones', datos);
+    pintarIntersecciones(rInter);
+
+    // ---- Partes 4, 5 y 6: área, comparación de métodos y gráfica ----
+    document.getElementById('contenido-area').innerHTML =
+      '<p class="estado-cargando"><span class="spinner"></span>Integrando numéricamente y comparando métodos…</p>';
+    mostrarSeccion('seccion-4');
+    document.getElementById('contenido-visualizacion').innerHTML =
+      '<p class="estado-cargando"><span class="spinner"></span>Generando la gráfica…</p>';
+    mostrarSeccion('seccion-6');
+    const rArea = await llamar('/api/area', datos);
+    pintarArea(rArea);
+    pintarVisualizacion(rArea);
+
+  } catch (err) {
+    banner.textContent = err.message;
+    banner.style.display = 'block';
+  } finally {
+    boton.disabled = false;
+    boton.textContent = 'Calcular y graficar';
+  }
+});
+
+function pintarIntegrabilidad(r){
+  function tarjeta(nombre, latex, rep){
+    const disc = rep.discontinuidades.map(d =>
+      `<li><code>x = ${Number(d.punto).toFixed(6)}</code> — ${d.tipo}${d.detalle ? ' ('+d.detalle+')' : ''}</li>`
+    ).join('');
+    return `
+      <div class="tarjeta ${rep.es_integrable ? 'ok' : 'mal'}">
+        <h3>${renderMath(latex)}</h3>
+        <p>¿Definida en todo el intervalo? <span class="etiqueta ${rep.definida_en_todo_el_intervalo ? 'si':'no'}">${rep.definida_en_todo_el_intervalo ? 'Sí' : 'No'}</span></p>
+        <p>¿Es integrable? <span class="etiqueta ${rep.es_integrable ? 'si':'no'}">${rep.es_integrable ? 'Sí' : 'No'}</span>
+           ${rep.requiere_integral_impropia ? ' <span class="etiqueta no">Integral impropia</span>' : ''}</p>
+        ${disc ? `<p>Discontinuidades:</p><ul class="lista-discontinuidades">${disc}</ul>` : '<p>No se detectaron discontinuidades.</p>'}
+        <p style="margin-top:8px;"><em>${rep.justificacion}</em></p>
+      </div>`;
+  }
+  document.getElementById('contenido-integrabilidad').innerHTML =
+    tarjeta('f', r.f_latex, r.reporte_f) + tarjeta('g', r.g_latex, r.reporte_g);
+}
+
+function pintarIntersecciones(r){
+  const cont = document.getElementById('contenido-intersecciones');
+  if (r.intersecciones.length === 0){
+    cont.innerHTML = '<div class="tarjeta">No se encontraron intersecciones dentro del intervalo: una función domina en todo [a, b].</div>';
+    return;
+  }
+  const filas = r.intersecciones.map(p =>
+    `<tr><td class="num">${p.x.toFixed(6)}</td><td class="num">${p.y.toFixed(6)}</td><td>${p.metodo}</td></tr>`
+  ).join('');
+  cont.innerHTML = `
+    <div class="tarjeta ok">
+      <p>Se encontraron ${r.intersecciones.length} intersección(es):</p>
+      <table>
+        <thead><tr><th>x</th><th>y</th><th>Método</th></tr></thead>
+        <tbody>${filas}</tbody>
+      </table>
+    </div>`;
+}
+
+function pintarArea(r){
+  const cont = document.getElementById('contenido-area');
+  let html = '';
+
+  if (r.es_infinita){
+    html += `
+      <div class="resultado-area">
+        <div class="valor-grande infinito">Área = ∞</div>
+        <div class="detalle">La integral impropia diverge en al menos un subintervalo: el área no está definida (es infinita).</div>
+      </div>`;
+  } else {
+    html += `
+      <div class="resultado-area">
+        <div class="valor-grande">${r.area_total.toFixed(6)}</div>
+        <div class="detalle">Referencia de alta precisión: ${r.referencia !== null ? r.referencia.toFixed(8) : '—'} &nbsp;|&nbsp; Error estimado: ${r.error_estimado.toExponential(3)}</div>
+      </div>`;
+  }
+
+  html += '<p style="font-size:13.5px; color:var(--tinta-suave); margin-bottom:6px;">Partición del intervalo:</p>';
+  html += '<table><thead><tr><th>Subintervalo</th><th>Domina</th><th>Área parcial</th><th>Método</th></tr></thead><tbody>';
+  r.subintervalos.forEach(s => {
+    html += `<tr>
+      <td class="num">[${s.x_izq.toFixed(4)}, ${s.x_der.toFixed(4)}]</td>
+      <td>${s.dominante}</td>
+      <td class="num">${isFinite(s.area_parcial) ? s.area_parcial.toFixed(6) : '∞'}</td>
+      <td style="font-size:12.5px;">${s.metodo}</td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+
+  if (r.metodos_comparados.length){
+    html += '<p style="font-size:13.5px; color:var(--tinta-suave); margin:16px 0 6px;">Comparación de métodos numéricos:</p>';
+    html += '<table><thead><tr><th>Método</th><th>Valor</th><th>N° evaluaciones</th><th>Error absoluto</th></tr></thead><tbody>';
+    r.metodos_comparados.forEach(m => {
+      html += `<tr>
+        <td>${m.metodo}</td>
+        <td class="num">${m.valor.toFixed(8)}</td>
+        <td class="num">${m.n}</td>
+        <td class="num">${m.error.toExponential(3)}</td>
+      </tr>`;
+    });
+    html += '</tbody></table>';
+  }
+
+  cont.innerHTML = html;
+}
+
+function pintarVisualizacion(r){
+  const cont = document.getElementById('contenido-visualizacion');
+  let html = '<div class="imagenes-grid">';
+  html += `<img class="imagen-resultado" src="data:image/png;base64,${r.imagen}" alt="Gráfica del área entre curvas">`;
+  if (r.imagen_convergencia){
+    html += `<img class="imagen-resultado" src="data:image/png;base64,${r.imagen_convergencia}" alt="Gráfica de convergencia del método numérico">`;
+  }
+  html += '</div>';
+  cont.innerHTML = html;
+}
+</script>
+</body>
+</html>
