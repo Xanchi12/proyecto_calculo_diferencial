@@ -156,5 +156,52 @@ class TestAreaEntreCurvas(unittest.TestCase):
         self.assertEqual(len(resultado.subintervalos), 3)
 
 
+class TestIntegracionNumericaConvergencia(unittest.TestCase):
+    def test_convergencia_no_produce_nan_con_discontinuidad_removible(self):
+        # Bug detectado en la interfaz web: si la referencia de alta
+        # precisión no recibe el punto de la discontinuidad removible
+        # como "punto crítico", scipy.integrate.quad puede evaluar justo
+        # ahí, obtener NaN, y contaminar TODA la tabla de convergencia
+        # (la gráfica terminaba vacía, sin ningún punto dibujado).
+        f = FuncionMatematica("(x**2 - 4)/(x - 2)", nombre="f")
+        g = FuncionMatematica("x", nombre="g")
+        integrador = IntegradorNumerico(
+            lambda xs: abs_diff(f, g, xs))
+        resultados = integrador.analisis_convergencia(
+            -1, 5, metodo="simpson", puntos_criticos=[2.0])
+        errores = [e for _, _, e in resultados]
+        self.assertTrue(all(np.isfinite(e) for e in errores),
+                        "El análisis de convergencia no debe producir NaN/inf "
+                        "cuando se informa el punto de discontinuidad.")
+        # El error debe decrecer (o mantenerse) al aumentar n.
+        self.assertLessEqual(errores[-1], errores[0])
+
+
+class TestSerializacionJSONWeb(unittest.TestCase):
+    def test_area_infinita_no_serializa_infinity_literal(self):
+        # Bug detectado en la interfaz web: json.dumps (usado por
+        # flask.jsonify) permite por defecto los literales no
+        # estándar Infinity/NaN, pero JSON.parse en el navegador los
+        # rechaza, rompiendo `fetch(...).json()` con
+        # "Unexpected token 'I' ... is not valid JSON".
+        from app import app
+        client = app.test_client()
+        datos = {"f": "1/x**2", "g": "0", "a": -1, "b": 2,
+                 "metodo": "simpson_1_3"}
+        r = client.post("/api/area", json=datos)
+        self.assertEqual(r.status_code, 200)
+        cuerpo = r.get_data(as_text=True)
+        self.assertNotIn("Infinity", cuerpo)
+        self.assertNotIn(": NaN", cuerpo)
+        j = r.get_json()
+        for sub in j["subintervalos"]:
+            self.assertTrue(sub["area_parcial"] is None or
+                            np.isfinite(sub["area_parcial"]))
+
+
+def abs_diff(f, g, xs):
+    return np.abs(f.funcion_numerica()(xs) - g.funcion_numerica()(xs))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

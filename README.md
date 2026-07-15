@@ -53,6 +53,7 @@ ejemplos rápidos para probar sin escribir nada.
 ```bash
 python main.py
 ```
+
 Pide f(x), g(x), a y b por teclado.
 
 ### 2. Modo con argumentos (por consola)
